@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-
 '''
 @File        :kine_UAV.py
 @Description :
@@ -8,11 +7,11 @@
 @Author      :Bo Sun
 '''
 
-
-from matplotlib.pyplot import axis
 import numpy as np
+from rotation_matrix import RotationMatrix
 
-class Kine_UAV():
+rm = RotationMatrix()
+class KineUAV():
     """
     UAV kinematics, yaw is fixed
     """
@@ -26,23 +25,6 @@ class Kine_UAV():
         self.Az = 0.2
         self.g = 9.81
         self.T_trim = self.g
-
-    def rotation_matrix(self, phi, theta):
-        """
-        The rotation matrix is built based on https://arxiv.org/abs/2003.05853
-        Pitch - Roll
-        """
-        # Rx = np.array([[1, 0, 0], [0, np.cos(phi), np.sin(phi)], [0, np.sin(phi), np.cos(phi)]])
-        # Ry = np.array([[np.cos(theta), 0, np.sin(theta)], [0, 1, 0], [-np.sin(theta), 0, np.cos(theta)]])
-
-        # R = np.matmul(Rx,Ry)
-
-        R = np.array([[np.cos(theta), 0, np.sin(theta)], [np.sin(phi)*np.sin(theta), np.cos(phi), -np.sin(phi)*np.cos(theta)], 
-        [-np.cos(phi)*np.sin(theta), np.sin(phi), np.cos(phi)*np.cos(theta)]])
-
-        return R
-
-
 
     def kine_nl_all(self, state, control):
         """
@@ -58,7 +40,7 @@ class Kine_UAV():
         phi_ref = control[1]
         theta_ref = control[2]
 
-        R = self.rotation_matrix(phi, theta)
+        R = rm.b2e_0psi(phi, theta)
 
         d_p = v
         d_v = np.matmul(R,np.array([0,0,T])) + np.array([0,0,-self.g]) - np.matmul(np.diag([self.Ax, self.Ay, self.Az]),v)
@@ -107,7 +89,6 @@ class Kine_UAV():
         These Kinnmatics euqations are built based on https://doi.org/10.1109/LRA.2020.3010730
         Yaw is fixed
         """
-       
         A, B, dist_grav = self.sys_nl_state_space(state[6], state[7])
 
         d_state = np.matmul(A,state) + np.matmul(B,control) + dist_grav
@@ -120,7 +101,6 @@ class Kine_UAV():
         states = [p,v,phi,theta]
         trimed condition 
         """
-
         A = np.array([
             [0,0,0,1,0,0,0,0],
             [0,0,0,0,1,0,0,0],
@@ -131,7 +111,6 @@ class Kine_UAV():
             [0,0,0,0,0,0,-1/self.tau_phi,0],
             [0,0,0,0,0,0,0,-1/self.tau_theta]
         ])
-
         B = np.array([
             [0,0,0],
             [0,0,0],
@@ -156,13 +135,9 @@ class Kine_UAV():
         a_temp = np.concatenate((A,np.zeros((8,3))), axis = 1)
         b_temp = np.concatenate((C,np.zeros((3,3))), axis = 1)
         A_aug = np.concatenate((a_temp,b_temp), axis = 0)
-
         B_aug = np.concatenate((B,np.zeros((3,3))), axis = 0)
         
-
-
         return A_aug, B_aug
-
 
     # def augsys_state_space(self, phi, theta):
     #     """
@@ -212,11 +187,7 @@ class Kine_UAV():
 
     #     return d_state_aug
         
-
-
-
-
-class Ref_pos():
+class RefPos():
     def __init__(self) -> None:
         pass
     

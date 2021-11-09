@@ -14,7 +14,9 @@ from NatNetClient import NatNetClient
 import numpy as np
 import math
 
-from tools.kine_UAV import Kine_UAV
+from tools.kine_UAV import KineUAV
+from tools.rotation_matrix import RotationMatrix
+
 
 uri = uri_helper.uri_from_env(default='radio://0/80/2M/E7E7E7E7E7')
 
@@ -24,16 +26,18 @@ logging.basicConfig(level=logging.ERROR)
 pos_ot = np.zeros((1,3))
 phi, theta, psi, vex, vey, vez = 0.0, 0.0, 0.0, 0.0, 0.0, 0.0
 
-kine_UAV = Kine_UAV()
-class LoggingExample:
+kine_UAV = KineUAV()
+rm = RotationMatrix()
+class LoggingDrone:
     """
-    Simple logging example class that logs the Stabilizer from a supplied
-    link uri and disconnects after 5s.
+    Logging the data acquired from the drone when it is connected
+    Modified from the LoggingExample of the Crazyflie Demo
     """
 
     def __init__(self, link_uri):
-        """ Initialize and run the example with the specified link_uri """
-
+        """ 
+        Initialize and run the logging with the specified link_uri 
+        """
         self._cf = Crazyflie(rw_cache='./cache')
 
         # Connect some callbacks from the Crazyflie API
@@ -51,8 +55,10 @@ class LoggingExample:
         self.is_connected = True
 
     def _connected(self, link_uri):
-        """ This callback is called form the Crazyflie API when a Crazyflie
-        has been connected and the TOCs have been downloaded."""
+        """ 
+        This callback is called from the Crazyflie API when a Crazyflie
+        has been connected and the TOCs have been downloaded.
+        """
         print('Connected to %s' % link_uri)
 
         self._cf.param.set_value('kalman.resetEstimation', '1')
@@ -88,71 +94,83 @@ class LoggingExample:
         except AttributeError:
             print('Could not add Stabilizer log config, bad configuration.')
 
-        # Start a timer to disconnect in 10s
-        t = Timer(300, self._cf.close_link) # adjust it !!!!
+        # Start a timer to disconnect in connect range s
+        con_ran = 300 # adjust it
+        t = Timer(con_ran, self._cf.close_link) 
         t.start()
 
     def _stab_log_error(self, logconf, msg):
-        """Callback from the log API when an error occurs"""
+        """
+        Callback from the log API when an error occurs
+        """
         print('Error when logging %s: %s' % (logconf.name, msg))
 
     def _stab_log_data(self, timestamp, data, logconf):
-        """Callback from a the log API when data arrives"""
+        """
+        Callback from a the log API when data arrives
+        """
         global phi, theta, psi, vex, vey, vez
         phi = data['stabilizer.roll']
-        theta = -data['stabilizer.pitch'] # make it right hand
+        theta = -data['stabilizer.pitch'] # make it right-hand
         psi = data['stabilizer.yaw']
         vbx = data['stateEstimate.vx']
         vby = data['stateEstimate.vy']
         vbz = data['stateEstimate.vz']
 
         v_body = np.array([vbx,vby,vbz])
-        v_earth = np.matmul(kine_UAV.rotation_matrix(phi, theta), v_body)
+        v_earth = np.matmul(rm.b2e_0psi(phi, theta), v_body)
         vex = v_earth[0]
         vey = v_earth[1]
         vez = v_earth[2]
-        
-
-        pass
 
     def _connection_failed(self, link_uri, msg):
-        """Callback when connection initial connection fails (i.e no Crazyflie
-        at the specified address)"""
+        """
+        Callback when connection initial connection fails 
+        (i.e no Crazyflie at the specified address)
+        """
         print('Connection to %s failed: %s' % (link_uri, msg))
         self.is_connected = False
 
     def _connection_lost(self, link_uri, msg):
-        """Callback when disconnected after a connection has been made (i.e
-        Crazyflie moves out of range)"""
+        """
+        Callback when disconnected after a connection has been made 
+        (i.e Crazyflie moves out of range)
+        """
         print('Connection to %s lost: %s' % (link_uri, msg))
 
     def _disconnected(self, link_uri):
-        """Callback when the Crazyflie is disconnected (called in all cases)"""
+        """
+        Callback when the Crazyflie is disconnected (called in all cases)
+        """
         print('Disconnected from %s' % link_uri)
         self.is_connected = False
 
 
+def receiveNewFrame(frameNumber, markerSetCount, unlabeledMarkersCount, rigidBodyCount, skeletonCount,
+                    labeledMarkerCount, latency, timecode, timecodeSub, timestamp, isRecording, trackedModelsChanged):
+    """
+    A callback function that gets connected to the NatNet client and called once per mocap frame.
+    """
+    pass
 
-# This is a callback function that gets connected to the NatNet client and called once per mocap frame.
-def receiveNewFrame( frameNumber, markerSetCount, unlabeledMarkersCount, rigidBodyCount, skeletonCount,
-                    labeledMarkerCount, latency, timecode, timecodeSub, timestamp, isRecording, trackedModelsChanged ):
-	pass
 
-
-# This is a callback function that gets connected to the NatNet client. It is called once per rigid body per frame
-def receiveRigidBodyFrame( id, position, rotation ):
+def receiveRigidBodyFrame(id, position, rotation):
+    """
+    A callback function that gets connected to the NatNet client. 
+    It is called once per rigid body per frame
+    """
     global pos_ot
     if id==1:
         # print(position)
         # print(rotation)
-        
+
+        # The coordinate of OptiTrack and CrazyFlie are different 
         # opti_track z x y
         # crazyflie x y z
         pos_ot[0,0] = position[2]
         pos_ot[0,1] = position[0]
         pos_ot[0,2] = position[1]
     
-
 
 if __name__ == '__main__':
 
@@ -163,7 +181,7 @@ if __name__ == '__main__':
 
  # Initialize the low-level drivers
     cflib.crtp.init_drivers()
-    le = LoggingExample(uri)
+    ld = LoggingDrone(uri)
 
     file = open('./dat00.csv', 'w')
     file.write('timeStamp, OTx, OTy, OTz, vex, vey, vez, roll, pitch, yaw\n')
@@ -173,44 +191,44 @@ if __name__ == '__main__':
     # are just waiting until we are disconnected.
     time.sleep(5)
     time0 = round(time.time()*1000)%1000000
-    while le.is_connected:
+    while ld.is_connected:
         try:
             time.sleep(0.01)
             time_now = round(time.time()*1000)%1000000-time0 # timestamp (ms)
             file.write('{}, {}, {}, {}, {}, {}, {}, {}, {}, {}\n'.format(time_now, pos_ot[0,0], pos_ot[0,1], pos_ot[0,2], vex, vey, vez, phi, theta, psi))
-            # le._cf.commander.send_setpoint(roll, pitch, yaw, thrust) # thrust 0-FFFF 
+            # ld._cf.commander.send_setpoint(roll, pitch, yaw, thrust) # thrust 0-FFFF 
             print('vex',vex, 'theta', theta)
             
-            # for y in range(10):
-            #     le._cf.commander.send_hover_setpoint(0, 0, 0, y / 25)
-            #     time.sleep(0.1)
+            for y in range(10):
+                ld._cf.commander.send_hover_setpoint(0, 0, 0, y / 25)
+                time.sleep(0.1)
 
-            # for _ in range(20):
-            #     le._cf.commander.send_hover_setpoint(0, 0, 0, 0.4)
-            #     time.sleep(0.1)
+            for _ in range(20):
+                ld._cf.commander.send_hover_setpoint(0, 0, 0, 0.4)
+                time.sleep(0.1)
 
-            # for _ in range(50):
-            #     le._cf.commander.send_hover_setpoint(0.5, 0, 36 * 2, 0.4)
-            #     time.sleep(0.1)
+            for _ in range(50):
+                ld._cf.commander.send_hover_setpoint(0.5, 0, 36 * 2, 0.4)
+                time.sleep(0.1)
 
-            # for _ in range(50):
-            #     le._cf.commander.send_hover_setpoint(0.5, 0, -36 * 2, 0.4)
-            #     time.sleep(0.1)
+            for _ in range(50):
+                ld._cf.commander.send_hover_setpoint(0.5, 0, -36 * 2, 0.4)
+                time.sleep(0.1)
 
-            # for _ in range(20):
-            #     le._cf.commander.send_hover_setpoint(0, 0, 0, 0.4)
-            #     time.sleep(0.1)
+            for _ in range(20):
+                ld._cf.commander.send_hover_setpoint(0, 0, 0, 0.4)
+                time.sleep(0.1)
 
-            # for y in range(10):
-            #     le._cf.commander.send_hover_setpoint(0, 0, 0, (10 - y) / 25)
-            #     time.sleep(0.1)
+            for y in range(10):
+                ld._cf.commander.send_hover_setpoint(0, 0, 0, (10 - y) / 25)
+                time.sleep(0.1)
 
-            # le._cf.commander.send_stop_setpoint()
+            ld._cf.commander.send_stop_setpoint()
 
         except KeyboardInterrupt:
             print("stop")
             ## landing procedure
-            # for i in range(50):
-            #     le[i]._cf.commander.send_hover_setpoint(0, 0, 0, 0.6-i*0.01)
-            #     time.sleep(0.1)
+            for i in range(50):
+                ld[i]._cf.commander.send_hover_setpoint(0, 0, 0, 0.6-i*0.01)
+                time.sleep(0.1)
             raise
