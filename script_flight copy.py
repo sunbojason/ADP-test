@@ -15,7 +15,6 @@ import numpy as np
 import math
 
 from tools.kine_UAV import KineUAV
-from tools.kine_UAV import RefPos
 from tools.rotation_matrix import RotationMatrix
 
 from control import lqr
@@ -31,14 +30,11 @@ phi, theta, psi, vex, vey, vez = 0.0, 0.0, 0.0, 0.0, 0.0, 0.0
 
 # instantiation
 kine_UAV = KineUAV()
-ref_pos = RefPos()
 rm = RotationMatrix()
 
-pos_int = np.array([0.0,0.0,0.0])
 Q = np.diag([0,0,0,0,0,0,0,0,1,1,1])
 R = np.diag([0.01,0.01,0.01])
-g_e = 9.81
-T_trim = g_e
+T_trim = 9.81
 A_aug, B_aug = kine_UAV.augsys_linear()
 K, _, _ = lqr(A_aug,B_aug,Q,R)
 
@@ -206,59 +202,29 @@ if __name__ == '__main__':
     # are just waiting until we are disconnected.
     time.sleep(5)
     time0 = round(time.time()*1000)%1000000
-    pos_ot0 = pos_ot
     while ld.is_connected:
         try:
+            time.sleep(0.01)
+            time_now = round(time.time()*1000)%1000000-time0 # timestamp (ms)
+            file.write('{}, {}, {}, {}, {}, {}, {}, {}, {}, {}\n'.format(time_now, pos_ot[0,0], pos_ot[0,1], pos_ot[0,2], vex, vey, vez, phi, theta, psi))
+            # ld._cf.commander.send_setpoint(roll, pitch, yaw, thrust) # thrust 0-FFFF 
+            # print('vex',vex, 'theta', theta)
+            
             for y in range(10):
-                ld._cf.commander.send_hover_setpoint(0, 0, 0, y / 20)
+                ld._cf.commander.send_hover_setpoint(0, 0, 0, y / 25)
                 time.sleep(0.1)
 
             for _ in range(20):
-                ld._cf.commander.send_hover_setpoint(0, 0, 0, 0.5)
+                ld._cf.commander.send_hover_setpoint(0, 0, 0, 0.4)
                 time.sleep(0.1)
 
-            while(True):
-                time_now = round(time.time()*1000)%1000000-time0 # timestamp (ms)
-                pos_ot_now = pos_ot-pos_ot0
-                file.write('{}, {}, {}, {}, {}, {}, {}, {}, {}, {}\n'.format(time_now, pos_ot_now[0,0], pos_ot_now[0,1], pos_ot_now[0,2], vex, vey, vez, phi, theta, psi))
-                """
-                my code
-                """
-                ref_now = ref_pos.circle(time_now/1000) # (s)
-                state_now = np.array([pos_ot_now[0,0], pos_ot_now[0,1], pos_ot_now[0,2], vex, vey, vez, phi, theta])
-                pos_now = np.array([pos_ot_now[0,0], pos_ot_now[0,1], pos_ot_now[0,2]])
-                pos_int += (pos_now - ref_now)*0.01 # dt = 10 ms
-                state_aug_now = np.concatenate((state_now,pos_int))
-                u_linear = -np.matmul(K, state_aug_now)
-                u_linear[0] += T_trim # add the trimming control
-                thrust = u_linear[0]/g_e*10409.572312 +10599.81853824
-                roll = u_linear[1]
-                pitch = u_linear[2]
-                yaw = 0.0
-                """
-                my code
-                """
-                ld._cf.commander.send_setpoint(roll, pitch, yaw, thrust) # thrust 0-FFFF 
-                # print('vex',vex, 'theta', theta)
-                if time_now/1000 > 10:
-                    break
-            
-            
-            # for y in range(10):
-            #     ld._cf.commander.send_hover_setpoint(0, 0, 0, y / 25)
-            #     time.sleep(0.1)
+            for _ in range(50):
+                ld._cf.commander.send_hover_setpoint(0.5, 0, 36 * 2, 0.4)
+                time.sleep(0.1)
 
-            # for _ in range(20):
-            #     ld._cf.commander.send_hover_setpoint(0, 0, 0, 0.4)
-            #     time.sleep(0.1)
-
-            # for _ in range(50):
-            #     ld._cf.commander.send_hover_setpoint(0.5, 0, 36 * 2, 0.4)
-            #     time.sleep(0.1)
-
-            # for _ in range(50):
-            #     ld._cf.commander.send_hover_setpoint(0.5, 0, -36 * 2, 0.4)
-            #     time.sleep(0.1)
+            for _ in range(50):
+                ld._cf.commander.send_hover_setpoint(0.5, 0, -36 * 2, 0.4)
+                time.sleep(0.1)
 
             for _ in range(20):
                 ld._cf.commander.send_hover_setpoint(0, 0, 0, 0.4)

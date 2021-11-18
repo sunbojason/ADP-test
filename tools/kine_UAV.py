@@ -208,7 +208,7 @@ class RefPos():
     def eight(self, time):
         x_r = 0.5*np.cos(np.pi*time/20)
         y_r = 1*np.sin(np.pi*time/10)
-        z_r = 2 - 1*np.cos(np.pi*time/20)
+        z_r = 1.5 - 1*np.cos(np.pi*time/20)
 
         return np.array([x_r,y_r,z_r])
 
