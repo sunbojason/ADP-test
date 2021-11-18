@@ -17,6 +17,8 @@ import math
 from tools.kine_UAV import KineUAV
 from tools.rotation_matrix import RotationMatrix
 
+from control import lqr
+
 
 uri = uri_helper.uri_from_env(default='radio://0/80/2M/E7E7E7E7E7')
 
@@ -28,6 +30,13 @@ phi, theta, psi, vex, vey, vez = 0.0, 0.0, 0.0, 0.0, 0.0, 0.0
 
 kine_UAV = KineUAV()
 rm = RotationMatrix()
+
+Q = np.diag([0,0,0,0,0,0,0,0,1,1,1])
+R = np.diag([0.01,0.01,0.01])
+T_trim = 9.81
+A_aug, B_aug = kine_UAV.augsys_linear()
+K, _, _ = lqr(A_aug,B_aug,Q,R)
+
 class LoggingDrone:
     """
     Logging the data acquired from the drone when it is connected
@@ -74,6 +83,7 @@ class LoggingDrone:
         self._lg_stab.add_variable('stateEstimate.vx', 'float')
         self._lg_stab.add_variable('stateEstimate.vy', 'float')
         self._lg_stab.add_variable('stateEstimate.vz', 'float')
+        self._lg_stab.add_variable('acc.z', 'float')
         # The fetch-as argument can be set to FP16 to save space in the log packet
         self._lg_stab.add_variable('pm.vbat', 'FP16')
 
@@ -197,7 +207,7 @@ if __name__ == '__main__':
             time_now = round(time.time()*1000)%1000000-time0 # timestamp (ms)
             file.write('{}, {}, {}, {}, {}, {}, {}, {}, {}, {}\n'.format(time_now, pos_ot[0,0], pos_ot[0,1], pos_ot[0,2], vex, vey, vez, phi, theta, psi))
             # ld._cf.commander.send_setpoint(roll, pitch, yaw, thrust) # thrust 0-FFFF 
-            print('vex',vex, 'theta', theta)
+            # print('vex',vex, 'theta', theta)
             
             for y in range(10):
                 ld._cf.commander.send_hover_setpoint(0, 0, 0, y / 25)
